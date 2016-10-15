@@ -147,10 +147,12 @@ evalStmt env (DoWhileStmt stmt expr) = do
                 Return r -> return (Return r)
                 _ -> evalStmt env (DoWhileStmt stmt expr)
         Bool False -> return Nil
+
 evalStmt env (BreakStmt id) = do
 	case id of
 		Nothing -> return (Break Nothing)
 		Just idM -> return (Break $ Just idM)
+		
 evalStmt env (ReturnStmt expr) = do
 	case expr of
 		Nothing -> return (Return Nil)
@@ -205,7 +207,7 @@ compareArgs env (Id arg:args) (param:params) = do
     setLocalVar arg evaluatedParam
     compareArgs env args params
 compareArgs env _ _ = error $ "Number of params mismatch" 
- 
+
 -- Do not touch this one :)
 evaluate :: StateT -> [Statement] -> StateTransformer Value
 evaluate env [] = return Nil
@@ -363,8 +365,9 @@ instance Applicative StateTransformer where
 --
 
 showResult :: (Value, StateT) -> String
-showResult (val, defs) =
-    show val ++ "\n" ++ show (toList $ union defs environment) ++ "\n"
+showResult (val, []) = ""
+showResult (val, (s:scopes)) =
+    show val ++ "\n" ++ show (toList $ union s (Map.empty)) ++ "\n" ++ showResult (val, scopes)
 
 getResult :: StateTransformer Value -> (Value, StateT)
 getResult (ST f) = f [Map.empty]
