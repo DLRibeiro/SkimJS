@@ -18,8 +18,8 @@ evalExpr env (Numlit num) = return $ Double num
 evalExpr env (StringLit string) = return $ String string
 evalExpr env (IntLit int) = return $ Int int
 evalExpr env (BoolLit bool) = return $ Bool bool
-evalExpr env (ArrayLit []) = return $ Array []
-evalExpr env (ArrayLit l) = createArray env l (Array [])
+evalExpr env (ArrayLit []) = return $ List []
+evalExpr env (ArrayLit l) = createList env l (List [])
 evalExpr env (InfixExpr op expr1 expr2) = do
     v1 <- evalExpr env expr1
     v2 <- evalExpr env expr2
@@ -29,6 +29,7 @@ evalExpr env (ListExpr [x]) =do
 	evalExpr env x
 evalExpr env (ListExpr (x:xs)) = do 
 	evalExpr env x >> evalExpr env xs  
+
 
 evalExpr env (AssignExpr OpAssign (LValue var) expr) = do
     proc <-stateLookup env var -- crashes if the variable doesn't exist
@@ -41,10 +42,10 @@ evalExpr env (AssignExpr OpAssign (LBracker exp1 exp2) expr ) = do
 			posDot <- evalExpr env exp2
 			e <- evalExpr env expr
 			case variable of 
-				Array l -> do
-					newArray <-createArray (Array []) (Array l) pos e
-					setVar id newArray
-				_ -> error $ "Not an array"
+				List l -> do
+					newList <-createList (List []) (List l) pos e
+					setVar id newList
+				_ -> error $ "Not an List"
 evalExpr env (UnaryAssignExpr inc (LVar var)) = do
 	case inc of 
 		PrefixInc -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpAdd (VarRef (Id var)) (IntLit 1)))
@@ -64,18 +65,18 @@ evalExpr env (CondExpr expr1 expr2 expr3) = do
 		Bool Fasle -> evalExpr env expr3
 
 
---ARRAY RELATED STUFFS
-createArray :: StateT ->[Expression] ->Value ->StateTransformer Value
-createArray env [] (Array l) = return $ Array l
-createArray env (x:xs) (Array l) = do
+--List RELATED STUFFS
+createList :: StateT ->[Expression] ->Value ->StateTransformer Value
+createList env [] (List l) = return $ List l
+createList env (x:xs) (List l) = do
 	evaluatedExpr <- evalExpr env x
-	createArray env xs (Array (l++[evaluatedExpr])
+	createList env xs (List (l++[evaluatedExpr])
 
 findElementAt :: StateT -> Value -> Value -> StateTransformer Value
-findElementAt env (Array []) (Int n) = return $ Nil
-findElementAt env (Array (x:xs)) (Int 0) = return x
-findElementAt env (Array (x:xs)) (Int n) = do 
-	findElementAt env (Array xs) (Int (n-1))
+findElementAt env (List []) (Int n) = return $ Nil
+findElementAt env (List (x:xs)) (Int 0) = return x
+findElementAt env (List (x:xs)) (Int n) = do 
+	findElementAt env (List xs) (Int (n-1))
 
 --STATEMENTS
 evalStmt :: StateT -> Statement -> StateTransformer Value
@@ -156,6 +157,8 @@ evalStmt env (ReturnStmt expr) = do
 		Just exprM -> do
 			evaluatedExpr <- evalExpr env exprM
 			return (Return evaluatedExpr)
+
+
 	    
 evalStmt env (BlockStmt []) = Nil
 evalStmt env (BlockStmt (x:xs)) = do
@@ -168,6 +171,41 @@ evalBlock env (BlockStmt []) = Nil
 evalBlock env (BlockStmt (x:xs)) = do
 	evalStmt env x >> evalBlock env (BlockStmt xs)
 
+--FUNCTION RELATED STUFF
+evalStmt env (FunctionStmt (Id name) args stmts) = setGlobalVar name (Function (Id name) args stmts)
+
+evalExpr env (CallExpr name params) = do
+    case name of
+        DotRef expr (Id id) -> do
+            array <- evalExpr env expr
+            case array of
+                List l -> do
+                    case id of
+                        "concat" -> concatOp env l params
+                        "head" -> headOp params
+                        "tail" -> tailOp params
+                        "equals" -> equalOp env l params
+        _ -> do
+            evaluedName <- evalExpr env name
+            case evaluedName of
+                Function id args stmt -> do
+                    pushScope
+                    compareArgs env args params
+                    ret <- evalStmt env (BlockStmt stmt)
+                    popScope
+                    case ret of
+                        Return r -> return r
+                        Break b -> error $ "break"
+                        _ -> return Nil
+
+compareArgs:: StateT ->[Id]->[Expression]->StateTransformer Value
+compareArgs env [] [] = return Nil
+compareArgs env (Id arg:args) (param:params) = do
+    evaluatedParam <- evalExpr env param
+    setLocalVar arg evaluatedParam
+    compareArgs env args params
+compareArgs env _ _ = error $ "Number of params mismatch" 
+ 
 -- Do not touch this one :)
 evaluate :: StateT -> [Statement] -> StateTransformer Value
 evaluate env [] = return Nil
@@ -212,6 +250,41 @@ prefixOp env PrefixMinus (Double v1) = return $ Double $ -v1
 environment :: StateT
 environment = [Map.empty]
 
+--Head /Tail/Concat
+
+headOp :: StateT -> [Value] -> StateTransformer Value
+headOp env (List []) = return Nil
+headOp env (List (x:xs)) = return x
+
+tailOp :: StateT -> [Value] -> StateTransformer Value
+tailOp env [] = return Nil
+tailOp env [x] = return x 
+tailOp env (x:xs) = tailOp env xs
+
+concatOp :: StateT ->[Value] ->[Expression] ->StateTransformer Value
+concatOp env l [] = return (List l)
+concatOp env l (param:params) = do 
+	evluatedParam <- evalExpr env param
+	case evaluatedParam of
+		(List l2) -> concatOp env (l++l2) params
+		v-> concatOp env (l++[v]) params
+equalsOp :: StateT ->[Value]->[Expression] ->StateTransformer Value
+equalsOp env l [] = return $Bool True
+equalsOp env (x:xs) (param:params) = do
+	evalParam <- evalExpr env param
+	case evalParam of
+		(List l2) -> do
+			if(compareList l l2)
+				then equalsOp env l params
+	
+compareList :: [Value] -> [Value] -> Bool
+compareList [] [] = True
+compareList x [] = False
+compareList [] y = False
+compareList (x:xs) (y:ys) = (x == y) && (compareList xs ys) 
+
+compareValue::StateT -> Value -> StateT -> StateTransformer Value
+compareValue env v1 v2 = return $Bool (v1 == v2) 
 
 
 stateLookup :: StateT -> String -> StateTransformer Value

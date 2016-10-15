@@ -11,7 +11,7 @@ data Value = Bool Bool
 	  | Break (Maybe Id)
 	  | Function Id [Id] [Statement]
 	  | Return Value
-	  | Array [Value]
+	  | List [Value]
 	  | Empty
 	deriving (Eq)
 	
@@ -29,7 +29,7 @@ instance Show Value where
   show Nil = "undefined"
   show (Function id [args] [comands] ) = "Func: " ++ id ++ (showArgs args)
   show (Return v) = show v
-  show (Array b) = "[" ++ (showArray (Array b)) ++ "]"
+  show (List b) = "[" ++ (showList (List b)) ++ "]"
   show GlobalVar = "Undefined variable"
   show (Double d) = show d
   
@@ -40,9 +40,9 @@ instance Show Value where
 showArgs [] = ""
 showArgs (Id c :cs) = (show c) ++ ";" ++ showArgs cs
 
-showArray [] = "";
-showArray [b] = show b
-showArray (Array (b:bs)) = show b ++ "," showArray bs
+showList [] = "";
+showList [b] = show b
+showList (List (b:bs)) = show b ++ "," showList bs
 
 showListContents :: [Value] -> String
 showListContents [] = ""
