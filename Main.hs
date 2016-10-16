@@ -53,10 +53,47 @@ evalExpr env (UnaryAssignExpr inc (LVar var)) = do
 		PostfixInc -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpAdd (VarRef (Id var)) (IntLit 1)))
         PostfixDec -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpSub (VarRef (Id var)) (IntLit 1)))
 
+evalExpr env (Fucnti)
 evalExpr env (BracketRef expr1 expr2) = do 
 	evaluatedExpr1 <- evalExpr env expr1
 	evaluatedExpr2 <- evalExpr env expr2
 	findElementAt env evaluatedExpr1 evaluatedExpr2
+
+evalExpr env (FuncExpr maybeId id stmt) = do
+    case maybeId of
+        Nothing -> return $ Function (Id "fun") id stmt
+        Just v -> return $ Function v id stmt
+
+
+evalExpr env (DotRef expr (Id id)) = do 
+	firstId <- evalExpr env expr
+--	case firstId of 
+--		(Function name arguments statements) -> do 
+--			listReturns <- searchForReturn (BlockStmt statements) (ListExpr [])
+	case firstId of 
+		List l -> do 
+			case id of 
+				"head" -> return $ headOp env l
+				"tail" -> return $ tailOp env l
+				_ -> error $ "Nao existe funcao"
+
+--compareIdFunction :: StateT -> Value -> Expression -> StateTransformer Value
+--compareIdFunction env id (ListExpr []) = erro $ "Nao existe essa funcao"
+--compareIdFucntion env id (ListExpr (n:xs)) = do 
+--	posFunc <- evalExpr env n
+--	case posFunc of 
+--		(Function name args stmts) -> do 
+--			if(id == name) then 
+
+
+searchForReturn :: Statement -> Expression
+searchForReturn (BlockStmt []) (ListExpr l) = ListExpr l 
+searchForReturn (BlockStmt (s:sts)) (ListExpr l) = case s of 
+	(ReturnStmt r) -> case r of 
+		Nothing -> searchForReturn (BlockStmt sts) (ListExpr l)
+		Just v -> searchForReturn (BlockStmt sts) (ListExpr l ++ [v])
+	_ -> searchForReturn (BlockStmt sts) (ListExpr l)
+
 
 evalExpr env (CondExpr expr1 expr2 expr3) = do
 	evaluatedExpr <- evalExpr env expr1
@@ -148,11 +185,27 @@ evalStmt env (DoWhileStmt stmt expr) = do
                 _ -> evalStmt env (DoWhileStmt stmt expr)
         Bool False -> return Nil
 
+evalStmt env (SwitchStmt expr cases) = do 
+	evaluatedExpr <- evalExpr env expr
+	compareCases env evaluatedExpr cases
+
+compareCases :: StateT -> Value -> [CaseClause] ->StateTransformer Value
+compareCases env evaluatedExpr _ = return Nil
+compareCases env evaluatedExpr (c:cs) = do 
+	case c of 
+		CaseClause exp stmts -> do 
+			evaluatedExpr2 <- evalExpr env exp
+			if(evaluatedExpr2 == evaluatedExpr) then
+				evalStmt env (BlockStmt stmts)
+			else compareCases env evaluateExpr (c:cs)
+		CaseDefault stmts2 -> do
+			evalStmt env (Block stmts2)
+
 evalStmt env (BreakStmt id) = do
 	case id of
 		Nothing -> return (Break Nothing)
 		Just idM -> return (Break $ Just idM)
-		
+
 evalStmt env (ReturnStmt expr) = do
 	case expr of
 		Nothing -> return (Return Nil)
@@ -174,13 +227,13 @@ evalBlock env (BlockStmt (x:xs)) = do
 	evalStmt env x >> evalBlock env (BlockStmt xs)
 
 --FUNCTION RELATED STUFF
-evalStmt env (FunctionStmt (Id name) args stmts) = setGlobalVar name (Function (Id name) args stmts)
+evalStmt env (FunctionStmt (Id name) args stmts) = setLocalVar name (Function (Id name) args stmts)
 
 evalExpr env (CallExpr name params) = do
     case name of
         DotRef expr (Id id) -> do
-            array <- evalExpr env expr
-            case array of
+            list <- evalExpr env expr
+            case list of
                 List l -> do
                     case id of
                         "concat" -> concatOp env l params
@@ -256,11 +309,11 @@ environment = [Map.empty]
 
 headOp :: StateT -> [Value] -> StateTransformer Value
 headOp env (List []) = return Nil
-headOp env (List (x:xs)) = return x
+headOp env (List (x:xs)) = evalExpr env x
 
 tailOp :: StateT -> [Value] -> StateTransformer Value
 tailOp env [] = return Nil
-tailOp env [x] = return x 
+tailOp env [x] = evalExpr env x
 tailOp env (x:xs) = tailOp env xs
 
 concatOp :: StateT ->[Value] ->[Expression] ->StateTransformer Value
