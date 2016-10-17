@@ -377,7 +377,7 @@ setGlobalAux var val (s:scopes) = if(scopes == [])
 
 setVarScopes :: String -> Value -> StateT -> StateT
 setVarScopes var val _ = error $ "Variavel nao existe"
-setVarScopes var val st = case (Map.lookup var (head st) of
+setVarScopes var val st = case (Map.lookup var (head st)) of
                           Nothing -> (head st):(setVarScopes var val (tail st))
 						  Just v -> (insert var val (head st)):(tail st)
 
