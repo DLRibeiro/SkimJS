@@ -35,8 +35,8 @@ evalExpr env (AssignExpr OpAssign (LValue var) expr) = do
     proc <-stateLookup env var -- crashes if the variable doesn't exist
     e <- evalExpr env expr
     if (proc == GlobalVar) then setGlobalVar var e else setVar var e
-evalExpr env (AssignExpr OpAssign (LBracker exp1 exp2) expr ) = do
-	case expr1 of
+evalExpr env (AssignExpr OpAssign (LBracket exp1 exp2) expr ) = do
+	case exp1 of
 		VarRef (Id id) -> do 
 			variable <- stateLookup env id
 			posDot <- evalExpr env exp2
@@ -51,8 +51,24 @@ evalExpr env (UnaryAssignExpr inc (LVar var)) = do
 		PrefixInc -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpAdd (VarRef (Id var)) (IntLit 1)))
 		PrefixDec -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpSub (VarRef (Id var)) (IntLit 1)))
 		PostfixInc -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpAdd (VarRef (Id var)) (IntLit 1)))
-                PostfixDec -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpSub (VarRef (Id var)) (IntLit 1)))
-
+        PostfixDec -> evalExpr env (AssignExpr OpAssign (LVar var) (InfixExpr OpSub (VarRef (Id var)) (IntLit 1)))
+evalExpr env (UnaryAssignExpr inc (LBracket exp1 exp2) = do 
+    case exp1 of 
+        VarRef (Id id) -> do 
+            variable <- stateLookup env id
+            posDot <- evalExpr env exp2
+            case variable of 
+                List l -> do
+                    case e of
+                        Int n -> do 
+                        case inc of 
+                            PrefixInc -> setVar id (reCreateList l (List []) (Int 0) (evalExpr env (InfixExpr OpAdd (findElementAt env (BracketRef exp1 exp2)) (IntLit1))))
+                            PrefixDec -> setVar id (reCreateList l (List []) (Int 0) (evalExpr env (InfixExpr OpSub (findElementAt env (BracketRef exp1 exp2)) (IntLit1))))
+                            PostfixInc -> setVar id (reCreateList l (List []) (Int 0) (evalExpr env (InfixExpr OpAdd (findElementAt env (BracketRef exp1 exp2)) (IntLit1))))
+                            PostfixDec -> setVar id (reCreateList l (List []) (Int 0) (evalExpr env (InfixExpr OpSub (findElementAt env (BracketRef exp1 exp2)) (IntLit1))))
+                            
+                       
+                       
 --evalExpr env (Fucnti)
 evalExpr env (BracketRef expr1 expr2) = do 
 	evaluatedExpr1 <- evalExpr env expr1
@@ -103,6 +119,13 @@ evalExpr env (CondExpr expr1 expr2 expr3) = do
 
 
 --List RELATED STUFFS
+reCreateList:: StateT -> Value->Value -> Value -> Value-> -> Value -> StateTransformer Value
+reCreateList env (List []) (List l) _ = return $ List l
+reCreateList env (List (x:xs)) (List k) (Int n) (Int alvo) changed = do
+    if(n == alvo) then  reCreateList env (List xs) (List k:[changed]) (Int (n-1)) (Int alvo) changed else reCreateList env (List xs) (List k:xs) (Int (n-1)) (Int alvo) changed 
+
+
+
 createList :: StateT ->[Expression] ->Value ->StateTransformer Value
 createList env [] (List l) = return $ List l
 createList env (x:xs) (List l) = do
@@ -168,7 +191,7 @@ evalStmt env (WhileStmt exp stmt) = do
 	case evaluatedExpr of
 		Bool True -> do 
 		e <- evalStmt env stmt 
-		case e of do
+		case e of
             Break b -> return Nil
             Return r -> return (Return r)
 			_ -> evalStmt(WhileStmt exp stmt)
@@ -286,7 +309,6 @@ infixOp env OpNEq  (Bool v1) (Bool v2) = return $ Bool $ v1 /= v2
 infixOp env OpLAnd (Bool v1) (Bool v2) = return $ Bool $ v1 && v2
 infixOp env OpLOr  (Bool v1) (Bool v2) = return $ Bool $ v1 || v2
 infixOp env OpXor  (Bool v1) (Bool v2) = return $ Bool $ v1^v2
-infixOp env OpBor (Bool v1) (Bool v2 ) = return $ Bool $ v1 | v2
 infixOp env OpLShift (Int v1) (Int v2 ) = return $ Int $ shiftl v1 v2
 infixOp env OpSpRShift  (Int v1) (Int v2) = return $ Int $ shiftR v1 v2
 
